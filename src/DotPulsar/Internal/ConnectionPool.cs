@@ -70,7 +70,7 @@ namespace DotPulsar.Internal
             };
 
             var connection = await GetConnection(_serviceUrl, _serviceUrl, cancellationToken);
-            var response = await connection.Send(partitionedMetadataCommand);
+            var response = await connection.Send(partitionedMetadataCommand, cancellationToken);
             response.Expect(BaseCommand.Type.PartitionedMetadataResponse);
 
             var partitionCount = response.PartitionMetadataResponse.Partitions;
@@ -207,7 +207,7 @@ namespace DotPulsar.Internal
                             var connection = _connections[serviceUrl];
                             if (connection is null)
                                 continue;
-                            if (!await connection.HasChannels())
+                            if (!await connection.HasChannels(cancellationToken))
                                 await DisposeConnection(serviceUrl);
                         }
                     }

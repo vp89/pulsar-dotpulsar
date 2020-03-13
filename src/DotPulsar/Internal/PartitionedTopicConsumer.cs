@@ -28,7 +28,7 @@ namespace DotPulsar.Internal
     public sealed class PartitionedTopicConsumer : IConsumer
     {
         public List<string> Topics { get; }
-        
+
         private readonly Guid _correlationId;
         private readonly IRegisterEvent _eventRegister;
         private List<IConsumerChannel> _channels;
@@ -54,7 +54,7 @@ namespace DotPulsar.Internal
             {
                 _channels.Add(new NotReadyChannel());
             }
-            
+
             _executor = executor;
             _state = state;
             _cachedCommandAck = new CommandAck();
@@ -79,7 +79,7 @@ namespace DotPulsar.Internal
                 return;
 
             _eventRegister.Register(new ConsumerDisposed(_correlationId, this));
-            
+
             foreach (var channel in _channels)
             {
                 await channel.DisposeAsync();
@@ -95,7 +95,7 @@ namespace DotPulsar.Internal
                 // TODO can this be distributed properly to receive in correct order?
                 foreach (var channel in _channels)
                 {
-                    yield return await _executor.Execute(() => channel.Receive(cancellationToken), cancellationToken);    
+                    yield return await _executor.Execute(() => channel.Receive(cancellationToken), cancellationToken);
                 }
             }
         }
@@ -115,10 +115,10 @@ namespace DotPulsar.Internal
         public async ValueTask Unsubscribe(CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
-            
+
             foreach (var channel in _channels)
             {
-                _ = await _executor.Execute(() => channel.Send(new CommandUnsubscribe()), cancellationToken);    
+                _ = await _executor.Execute(() => channel.Send(new CommandUnsubscribe(), cancellationToken), cancellationToken);
             }
         }
 
@@ -127,8 +127,8 @@ namespace DotPulsar.Internal
             ThrowIfDisposed();
             var seek = new CommandSeek { MessageId = messageId.Data };
             var partition = messageId.Partition;
-            
-            _ = await _executor.Execute(() => _channels[partition].Send(seek), cancellationToken);
+
+            _ = await _executor.Execute(() => _channels[partition].Send(seek, cancellationToken), cancellationToken);
             return;
         }
 
@@ -137,24 +137,24 @@ namespace DotPulsar.Internal
             ThrowIfDisposed();
 
             MessageIdData lastMessageId = null;
-            
+
             foreach (var channel in _channels)
             {
-                var response = await _executor.Execute(() => channel.Send(new CommandGetLastMessageId()), cancellationToken);
+                var response = await _executor.Execute(() => channel.Send(new CommandGetLastMessageId(), cancellationToken), cancellationToken);
 
                 if (response.LastMessageId.EntryId > lastMessageId?.EntryId)
                 {
                     lastMessageId = response.LastMessageId;
                 }
             }
-            
+
             return new MessageId(lastMessageId);
         }
 
         private async ValueTask Acknowledge(MessageIdData messageIdData, CommandAck.AckType ackType, CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
-            
+
             await _executor.Execute(() =>
             {
                 _cachedCommandAck.Type = ackType;
@@ -162,7 +162,7 @@ namespace DotPulsar.Internal
                 _cachedCommandAck.MessageIds.Add(messageIdData);
 
                 var partition = messageIdData.Partition;
-                return _channels[partition].Send(_cachedCommandAck);
+                return _channels[partition].Send(_cachedCommandAck, cancellationToken);
             }, cancellationToken);
         }
 

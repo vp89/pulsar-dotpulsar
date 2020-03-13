@@ -81,7 +81,7 @@ namespace DotPulsar.Internal
         public async ValueTask<MessageId> Send(ReadOnlySequence<byte> data, CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
-            var response = await _executor.Execute(() => _channel.Send(data), cancellationToken);
+            var response = await _executor.Execute(() => _channel.Send(data, cancellationToken), cancellationToken);
             return new MessageId(response.MessageId);
         }
 
@@ -94,7 +94,7 @@ namespace DotPulsar.Internal
         public async ValueTask<MessageId> Send(MessageMetadata metadata, ReadOnlySequence<byte> data, CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
-            var response = await _executor.Execute(() => _channel.Send(metadata.Metadata, data), cancellationToken);
+            var response = await _executor.Execute(() => _channel.Send(metadata.Metadata, data, cancellationToken), cancellationToken);
             return new MessageId(response.MessageId);
         }
 

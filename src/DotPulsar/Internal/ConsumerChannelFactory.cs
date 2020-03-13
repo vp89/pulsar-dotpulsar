@@ -44,7 +44,7 @@ namespace DotPulsar.Internal
             _executor = executor;
             _messagePrefetchCount = options.MessagePrefetchCount;
             _options = options;
-            
+
             _batchHandler = new BatchHandler(true);
         }
 
@@ -63,11 +63,11 @@ namespace DotPulsar.Internal
                 Topic = _options.Topic,
                 Type = (CommandSubscribe.SubType)_options.SubscriptionType
             };
-            
+
             var connection = await _connectionPool.FindConnectionForTopic(topic, cancellationToken);
             var messageQueue = new AsyncQueue<MessagePackage>();
             var channel = new Channel(_correlationId, _eventRegister, messageQueue);
-            var response = await connection.Send(subscribe, channel);
+            var response = await connection.Send(subscribe, channel, cancellationToken);
             return new ConsumerChannel(response.ConsumerId, _messagePrefetchCount, messageQueue, connection, _batchHandler);
         }
     }

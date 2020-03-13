@@ -112,9 +112,9 @@ namespace DotPulsar.Internal
             CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
-            
+
             var chosen = ChooseChannel();
-            var response = await _executor.Execute(() => _channels[chosen].Send(data), cancellationToken);
+            var response = await _executor.Execute(() => _channels[chosen].Send(data, cancellationToken), cancellationToken);
             return new MessageId(response.MessageId);
         }
 
@@ -140,9 +140,9 @@ namespace DotPulsar.Internal
             CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
-            
+
             int chosen = ChooseChannel(metadata?.Key);
-            var response = await _executor.Execute(() => _channels[chosen].Send(metadata.Metadata, data), cancellationToken);
+            var response = await _executor.Execute(() => _channels[chosen].Send(metadata.Metadata, data, cancellationToken), cancellationToken);
             return new MessageId(response.MessageId);
         }
 
@@ -151,7 +151,7 @@ namespace DotPulsar.Internal
             ThrowIfDisposed();
 
             if (_options.MessageRoutingMode == MessageRoutingMode.SinglePartition)
-            {                
+            {
                 _singlePartitionModeIndex = new Random().Next(0, channels.Count);
             }
 

@@ -50,7 +50,7 @@ namespace DotPulsar.Internal
             var commandProducer = new CommandProducer { Topic = topic };
             var connection = await _connectionPool.FindConnectionForTopic(topic, cancellationToken);
             var channel = new Channel(_correlationId, _eventRegister, new AsyncQueue<MessagePackage>());
-            var response = await connection.Send(commandProducer, channel);
+            var response = await connection.Send(commandProducer, channel, cancellationToken);
             return new ProducerChannel(response.ProducerId, response.ProducerName, _sequenceId, connection);
         }
     }
