@@ -42,11 +42,25 @@ namespace DotPulsar
         public IProducer CreateProducer(ProducerOptions options)
         {
             ThrowIfDisposed();
+
+            var topics = _connectionPool.GetTopics(options.Topic, CancellationToken.None).GetAwaiter().GetResult();
+
             var correlationId = Guid.NewGuid();
             var executor = new Executor(correlationId, _processManager, _exceptionHandler);
             var factory = new ProducerChannelFactory(correlationId, _processManager, _connectionPool, executor, options);
             var stateManager = new StateManager<ProducerState>(ProducerState.Disconnected, ProducerState.Closed, ProducerState.Faulted);
-            var producer = new Producer(correlationId, _processManager, new NotReadyChannel(), new AsyncLockExecutor(executor), stateManager);
+
+            IProducer producer;
+
+            if (topics.Count == 1)
+            {
+                producer = new Producer(correlationId, _processManager, topics[0], new NotReadyChannel(), new AsyncLockExecutor(executor), stateManager);
+            }
+            else
+            {
+                producer = new PartitionedTopicProducer(correlationId, _processManager, topics, new AsyncLockExecutor(executor), stateManager, options);
+            }
+
             var process = new ProducerProcess(correlationId, stateManager, factory, producer);
             _processManager.Add(process);
             process.Start();
@@ -56,11 +70,25 @@ namespace DotPulsar
         public IConsumer CreateConsumer(ConsumerOptions options)
         {
             ThrowIfDisposed();
+
+            var topics = _connectionPool.GetTopics(options.Topic, CancellationToken.None).GetAwaiter().GetResult();
+            
             var correlationId = Guid.NewGuid();
             var executor = new Executor(correlationId, _processManager, _exceptionHandler);
             var factory = new ConsumerChannelFactory(correlationId, _processManager, _connectionPool, executor, options);
             var stateManager = new StateManager<ConsumerState>(ConsumerState.Disconnected, ConsumerState.Closed, ConsumerState.ReachedEndOfTopic, ConsumerState.Faulted);
-            var consumer = new Consumer(correlationId, _processManager, new NotReadyChannel(), new AsyncLockExecutor(executor), stateManager);
+
+            IConsumer consumer;
+
+            if (topics.Count == 1)
+            {
+                consumer = new Consumer(correlationId, _processManager, topics[0], new NotReadyChannel(), new AsyncLockExecutor(executor), stateManager);
+            }
+            else
+            {
+                consumer = new PartitionedTopicConsumer(correlationId, _processManager, topics, new AsyncLockExecutor(executor), stateManager);
+            }
+            
             var process = new ConsumerProcess(correlationId, stateManager, factory, consumer, options.SubscriptionType == SubscriptionType.Failover);
             _processManager.Add(process);
             process.Start();

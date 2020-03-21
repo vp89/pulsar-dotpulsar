@@ -13,6 +13,7 @@
  */
 
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -20,6 +21,8 @@ namespace DotPulsar.Internal.Abstractions
 {
     public interface IConnectionPool : IAsyncDisposable
     {
+        ValueTask<List<string>> GetTopics(string topic, CancellationToken cancellationToken);
+
         ValueTask<IConnection> FindConnectionForTopic(string topic, CancellationToken cancellationToken = default);
     }
 }

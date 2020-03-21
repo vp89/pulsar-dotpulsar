@@ -14,8 +14,10 @@
 
 using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using DotPulsar.Internal.Abstractions;
 
 namespace DotPulsar.Abstractions
 {
@@ -24,6 +26,8 @@ namespace DotPulsar.Abstractions
     /// </summary>
     public interface IProducer : IStateChanged<ProducerState>, IAsyncDisposable
     {
+        List<string> Topics { get; }
+
         /// <summary>
         /// Sends a message.
         /// </summary>
@@ -53,5 +57,7 @@ namespace DotPulsar.Abstractions
         /// Sends a message with metadata.
         /// </summary>
         ValueTask<MessageId> Send(MessageMetadata metadata, ReadOnlySequence<byte> data, CancellationToken cancellationToken = default);
+
+        void SetChannels(List<IProducerChannel> channels);
     }
 }

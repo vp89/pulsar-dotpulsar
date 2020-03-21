@@ -19,6 +19,6 @@ namespace DotPulsar.Internal.Abstractions
 {
     public interface IConsumerChannelFactory
     {
-        Task<IConsumerChannel> Create(CancellationToken cancellationToken = default);
+        Task<IConsumerChannel> Create(string topic, CancellationToken cancellationToken = default);
     }
 }

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -18,36 +18,43 @@ using DotPulsar.Internal.Events;
 using DotPulsar.Internal.PulsarApi;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace DotPulsar.Internal
 {
-    public sealed class Consumer : IConsumer
+    public sealed class PartitionedTopicConsumer : IConsumer
     {
         public List<string> Topics { get; }
         
         private readonly Guid _correlationId;
         private readonly IRegisterEvent _eventRegister;
-        private IConsumerChannel _channel;
+        private List<IConsumerChannel> _channels;
         private readonly CommandAck _cachedCommandAck;
         private readonly IExecute _executor;
         private readonly IStateChanged<ConsumerState> _state;
         private int _isDisposed;
 
-        public Consumer(
+        public PartitionedTopicConsumer(
             Guid correlationId,
             IRegisterEvent eventRegister,
-            string topic,
-            IConsumerChannel initialChannel,
+            List<string> topics,
             IExecute executor,
             IStateChanged<ConsumerState> state)
         {
             _correlationId = correlationId;
             _eventRegister = eventRegister;
-            Topics = new List<string>() { topic };
-            _channel = initialChannel;
+            Topics = topics;
+
+            _channels = new List<IConsumerChannel>(topics.Count);
+
+            foreach (var _ in topics)
+            {
+                _channels.Add(new NotReadyChannel());
+            }
+            
             _executor = executor;
             _state = state;
             _cachedCommandAck = new CommandAck();
@@ -72,7 +79,11 @@ namespace DotPulsar.Internal
                 return;
 
             _eventRegister.Register(new ConsumerDisposed(_correlationId, this));
-            await _channel.DisposeAsync();
+            
+            foreach (var channel in _channels)
+            {
+                await channel.DisposeAsync();
+            }
         }
 
         public async IAsyncEnumerable<Message> Messages([EnumeratorCancellation] CancellationToken cancellationToken)
@@ -81,7 +92,11 @@ namespace DotPulsar.Internal
 
             while (!cancellationToken.IsCancellationRequested)
             {
-                yield return await _executor.Execute(() => _channel.Receive(cancellationToken), cancellationToken);
+                // TODO can this be distributed properly to receive in correct order?
+                foreach (var channel in _channels)
+                {
+                    yield return await _executor.Execute(() => channel.Receive(cancellationToken), cancellationToken);    
+                }
             }
         }
 
@@ -100,44 +115,61 @@ namespace DotPulsar.Internal
         public async ValueTask Unsubscribe(CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
-            _ = await _executor.Execute(() => _channel.Send(new CommandUnsubscribe()), cancellationToken);
+            
+            foreach (var channel in _channels)
+            {
+                _ = await _executor.Execute(() => channel.Send(new CommandUnsubscribe()), cancellationToken);    
+            }
         }
 
         public async ValueTask Seek(MessageId messageId, CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
             var seek = new CommandSeek { MessageId = messageId.Data };
-            _ = await _executor.Execute(() => _channel.Send(seek), cancellationToken);
+            var partition = messageId.Partition;
+            
+            _ = await _executor.Execute(() => _channels[partition].Send(seek), cancellationToken);
             return;
         }
 
         public async ValueTask<MessageId> GetLastMessageId(CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
-            var response = await _executor.Execute(() => _channel.Send(new CommandGetLastMessageId()), cancellationToken);
-            return new MessageId(response.LastMessageId);
+
+            MessageIdData lastMessageId = null;
+            
+            foreach (var channel in _channels)
+            {
+                var response = await _executor.Execute(() => channel.Send(new CommandGetLastMessageId()), cancellationToken);
+
+                if (response.LastMessageId.EntryId > lastMessageId?.EntryId)
+                {
+                    lastMessageId = response.LastMessageId;
+                }
+            }
+            
+            return new MessageId(lastMessageId);
         }
 
         private async ValueTask Acknowledge(MessageIdData messageIdData, CommandAck.AckType ackType, CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
+            
             await _executor.Execute(() =>
             {
                 _cachedCommandAck.Type = ackType;
                 _cachedCommandAck.MessageIds.Clear();
                 _cachedCommandAck.MessageIds.Add(messageIdData);
-                return _channel.Send(_cachedCommandAck);
+
+                var partition = messageIdData.Partition;
+                return _channels[partition].Send(_cachedCommandAck);
             }, cancellationToken);
         }
 
         public void SetChannels(List<IConsumerChannel> channels)
         {
             ThrowIfDisposed();
-            
-            if (channels.Count != 1)
-                throw new Exception($"Expected 1 channel passed in to {nameof(Consumer)} but received {channels.Count}");
-            
-            _channel = channels[0];
+            _channels = channels;
         }
 
         private void ThrowIfDisposed()

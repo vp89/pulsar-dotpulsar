@@ -27,7 +27,6 @@ namespace DotPulsar.Internal
         private readonly IConnectionPool _connectionPool;
         private readonly IExecute _executor;
         private readonly SequenceId _sequenceId;
-        private readonly CommandProducer _commandProducer;
 
         public ProducerChannelFactory(
             Guid correlationId,
@@ -41,22 +40,17 @@ namespace DotPulsar.Internal
             _connectionPool = connectionPool;
             _executor = executor;
             _sequenceId = new SequenceId(options.InitialSequenceId);
-
-            _commandProducer = new CommandProducer
-            {
-                ProducerName = options.ProducerName,
-                Topic = options.Topic
-            };
         }
 
-        public async Task<IProducerChannel> Create(CancellationToken cancellationToken)
-            => await _executor.Execute(() => GetChannel(cancellationToken), cancellationToken);
+        public async Task<IProducerChannel> Create(string topic, CancellationToken cancellationToken)
+            => await _executor.Execute(() => GetChannel(topic, cancellationToken), cancellationToken);
 
-        private async ValueTask<IProducerChannel> GetChannel(CancellationToken cancellationToken)
+        private async ValueTask<IProducerChannel> GetChannel(string topic, CancellationToken cancellationToken)
         {
-            var connection = await _connectionPool.FindConnectionForTopic(_commandProducer.Topic, cancellationToken);
+            var commandProducer = new CommandProducer { Topic = topic };
+            var connection = await _connectionPool.FindConnectionForTopic(topic, cancellationToken);
             var channel = new Channel(_correlationId, _eventRegister, new AsyncQueue<MessagePackage>());
-            var response = await connection.Send(_commandProducer, channel, cancellationToken);
+            var response = await connection.Send(commandProducer, channel);
             return new ProducerChannel(response.ProducerId, response.ProducerName, _sequenceId, connection);
         }
     }

@@ -77,6 +77,9 @@ namespace DotPulsar.Internal
                 case BaseCommand.Type.GetLastMessageId:
                     cmd.GetLastMessageId.RequestId = _requestId++;
                     return;
+                case BaseCommand.Type.PartitionedMetadata:
+                    cmd.PartitionMetadata.RequestId = _requestId++;
+                    return;
             }
         }
 
@@ -102,6 +105,8 @@ namespace DotPulsar.Internal
                 case BaseCommand.Type.CloseConsumer: return cmd.CloseConsumer.RequestId.ToString();
                 case BaseCommand.Type.GetLastMessageId: return cmd.GetLastMessageId.RequestId.ToString();
                 case BaseCommand.Type.GetLastMessageIdResponse: return cmd.GetLastMessageIdResponse.RequestId.ToString();
+                case BaseCommand.Type.PartitionedMetadata: return cmd.PartitionMetadata.RequestId.ToString();
+                case BaseCommand.Type.PartitionedMetadataResponse: return cmd.PartitionMetadataResponse.RequestId.ToString();
                 default: throw new ArgumentOutOfRangeException("CommandType", cmd.CommandType, "CommandType not supported as request/response type");
             }
         }

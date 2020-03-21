@@ -29,7 +29,7 @@ namespace DotPulsar.Tests.Internal
             var sut = new AsyncLock();
 
             //Act
-            var actual = sut.Lock(CancellationToken.None);
+            var actual = sut.Lock();
 
             //Assert
             Assert.True(actual.IsCompleted);
@@ -44,10 +44,10 @@ namespace DotPulsar.Tests.Internal
         {
             //Arrange
             var sut = new AsyncLock();
-            var alreadyTaken = await sut.Lock(CancellationToken.None);
+            var alreadyTaken = await sut.Lock();
 
             //Act
-            var actual = sut.Lock(CancellationToken.None);
+            var actual = sut.Lock();
 
             //Assert
             Assert.False(actual.IsCompleted);
@@ -66,7 +66,7 @@ namespace DotPulsar.Tests.Internal
             await sut.DisposeAsync();
 
             //Act
-            var exception = await Record.ExceptionAsync(() => sut.Lock(CancellationToken.None));
+            var exception = await Record.ExceptionAsync(() => sut.Lock());
 
             //Assert
             Assert.IsType<ObjectDisposedException>(exception);
@@ -77,8 +77,8 @@ namespace DotPulsar.Tests.Internal
         {
             //Arrange
             var sut = new AsyncLock();
-            var gotLock = await sut.Lock(CancellationToken.None);
-            var awaiting = sut.Lock(CancellationToken.None);
+            var gotLock = await sut.Lock();
+            var awaiting = sut.Lock();
             _ = Task.Run(async () => await sut.DisposeAsync());
 
             //Act
@@ -98,7 +98,7 @@ namespace DotPulsar.Tests.Internal
             //Arrange
             var cts = new CancellationTokenSource();
             var sut = new AsyncLock();
-            var gotLock = await sut.Lock(CancellationToken.None);
+            var gotLock = await sut.Lock();
             var awaiting = sut.Lock(cts.Token);
 
             //Act
@@ -119,7 +119,7 @@ namespace DotPulsar.Tests.Internal
         {
             //Arrange
             var sut = new AsyncLock();
-            var gotLock = await sut.Lock(CancellationToken.None);
+            var gotLock = await sut.Lock();
             var disposeTask = Task.Run(async () => await sut.DisposeAsync());
             Assert.False(disposeTask.IsCompleted);
 

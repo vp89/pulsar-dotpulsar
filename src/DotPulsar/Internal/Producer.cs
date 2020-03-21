@@ -17,6 +17,7 @@ using DotPulsar.Internal.Abstractions;
 using DotPulsar.Internal.Events;
 using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -24,6 +25,8 @@ namespace DotPulsar.Internal
 {
     public sealed class Producer : IProducer
     {
+        public List<string> Topics { get; }
+
         private readonly Guid _correlationId;
         private readonly IRegisterEvent _eventRegister;
         private IProducerChannel _channel;
@@ -34,12 +37,14 @@ namespace DotPulsar.Internal
         public Producer(
             Guid correlationId,
             IRegisterEvent registerEvent,
+            string topic,
             IProducerChannel initialChannel,
             IExecute executor,
             IStateChanged<ProducerState> state)
         {
             _correlationId = correlationId;
             _eventRegister = registerEvent;
+            Topics = new List<string>() { topic };
             _channel = initialChannel;
             _executor = executor;
             _state = state;
@@ -76,7 +81,7 @@ namespace DotPulsar.Internal
         public async ValueTask<MessageId> Send(ReadOnlySequence<byte> data, CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
-            var response = await _executor.Execute(() => _channel.Send(data, cancellationToken), cancellationToken);
+            var response = await _executor.Execute(() => _channel.Send(data), cancellationToken);
             return new MessageId(response.MessageId);
         }
 
@@ -89,14 +94,18 @@ namespace DotPulsar.Internal
         public async ValueTask<MessageId> Send(MessageMetadata metadata, ReadOnlySequence<byte> data, CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
-            var response = await _executor.Execute(() => _channel.Send(metadata.Metadata, data, cancellationToken), cancellationToken);
+            var response = await _executor.Execute(() => _channel.Send(metadata.Metadata, data), cancellationToken);
             return new MessageId(response.MessageId);
         }
 
-        internal void SetChannel(IProducerChannel channel)
+        public void SetChannels(List<IProducerChannel> channels)
         {
             ThrowIfDisposed();
-            _channel = channel;
+
+            if (channels.Count != 1)
+                throw new Exception($"Expected 1 channel passed in to {nameof(Producer)} but received {channels.Count}");
+            
+            _channel = channels[0];
         }
 
         private void ThrowIfDisposed()

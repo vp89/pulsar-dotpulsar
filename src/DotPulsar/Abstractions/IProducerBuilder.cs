@@ -35,6 +35,13 @@ namespace DotPulsar.Abstractions
         IProducerBuilder Topic(string topic);
 
         /// <summary>
+        /// Set the message routing mode for partitioned topics.
+        /// </summary>
+        /// <param name="messageRoutingMode"></param>
+        /// <returns></returns>
+        IProducerBuilder MessageRoutingMode(MessageRoutingMode messageRoutingMode);
+
+        /// <summary>
         /// Create the producer.
         /// </summary>
         IProducer Create();

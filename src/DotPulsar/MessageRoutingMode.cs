@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,19 +14,10 @@
 
 namespace DotPulsar
 {
-    public sealed class ProducerOptions
+    public enum MessageRoutingMode
     {
-        internal const ulong DefaultInitialSequenceId = 0;
-
-        public ProducerOptions(string topic)
-        {
-            InitialSequenceId = DefaultInitialSequenceId;
-            Topic = topic;
-        }
-
-        public string? ProducerName { get; set; }
-        public ulong InitialSequenceId { get; set; }
-        public string Topic { get; set; }
-        public MessageRoutingMode MessageRoutingMode { get; set; }
+        SinglePartition,
+        RoundRobinPartition,
+        CustomPartition
     }
 }

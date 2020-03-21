@@ -29,6 +29,7 @@ namespace DotPulsar.Internal
         private readonly CommandSubscribe _subscribe;
         private readonly uint _messagePrefetchCount;
         private readonly BatchHandler _batchHandler;
+        private readonly ConsumerOptions _options;
 
         public ConsumerChannelFactory(
             Guid correlationId,
@@ -42,30 +43,31 @@ namespace DotPulsar.Internal
             _connectionPool = connectionPool;
             _executor = executor;
             _messagePrefetchCount = options.MessagePrefetchCount;
-
-            _subscribe = new CommandSubscribe
-            {
-                ConsumerName = options.ConsumerName,
-                initialPosition = (CommandSubscribe.InitialPosition)options.InitialPosition,
-                PriorityLevel = options.PriorityLevel,
-                ReadCompacted = options.ReadCompacted,
-                Subscription = options.SubscriptionName,
-                Topic = options.Topic,
-                Type = (CommandSubscribe.SubType)options.SubscriptionType
-            };
-
+            _options = options;
+            
             _batchHandler = new BatchHandler(true);
         }
 
-        public async Task<IConsumerChannel> Create(CancellationToken cancellationToken)
-            => await _executor.Execute(() => GetChannel(cancellationToken), cancellationToken);
+        public async Task<IConsumerChannel> Create(string topic, CancellationToken cancellationToken)
+            => await _executor.Execute(() => GetChannel(topic, cancellationToken), cancellationToken);
 
-        private async ValueTask<IConsumerChannel> GetChannel(CancellationToken cancellationToken)
+        private async ValueTask<IConsumerChannel> GetChannel(string topic, CancellationToken cancellationToken)
         {
-            var connection = await _connectionPool.FindConnectionForTopic(_subscribe.Topic, cancellationToken);
+            var subscribe = new CommandSubscribe
+            {
+                ConsumerName = _options.ConsumerName,
+                initialPosition = (CommandSubscribe.InitialPosition)_options.InitialPosition,
+                PriorityLevel = _options.PriorityLevel,
+                ReadCompacted = _options.ReadCompacted,
+                Subscription = _options.SubscriptionName,
+                Topic = _options.Topic,
+                Type = (CommandSubscribe.SubType)_options.SubscriptionType
+            };
+            
+            var connection = await _connectionPool.FindConnectionForTopic(topic, cancellationToken);
             var messageQueue = new AsyncQueue<MessagePackage>();
             var channel = new Channel(_correlationId, _eventRegister, messageQueue);
-            var response = await connection.Send(_subscribe, channel, cancellationToken);
+            var response = await connection.Send(subscribe, channel);
             return new ConsumerChannel(response.ConsumerId, _messagePrefetchCount, messageQueue, connection, _batchHandler);
         }
     }

@@ -14,7 +14,9 @@
 
 using DotPulsar.Internal.Abstractions;
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using DotPulsar.Abstractions;
 
 namespace DotPulsar.Internal
 {
@@ -22,14 +24,14 @@ namespace DotPulsar.Internal
     {
         private readonly IStateManager<ConsumerState> _stateManager;
         private readonly IConsumerChannelFactory _factory;
-        private readonly Consumer _consumer;
+        private readonly IConsumer _consumer;
         private readonly bool _isFailoverSubscription;
 
         public ConsumerProcess(
             Guid correlationId,
             IStateManager<ConsumerState> stateManager,
             IConsumerChannelFactory factory,
-            Consumer consumer,
+            IConsumer consumer,
             bool isFailoverSubscription) : base(correlationId)
         {
             _stateManager = stateManager;
@@ -84,17 +86,26 @@ namespace DotPulsar.Internal
 
         private async void SetupChannel()
         {
-            IConsumerChannel? channel = null;
+            var channels = new List<IConsumerChannel>();
 
             try
             {
-                channel = await _factory.Create(CancellationTokenSource.Token);
-                _consumer.SetChannel(channel);
+                foreach (var topic in _consumer.Topics)
+                {
+                    channels.Add(await _factory.Create(topic, CancellationTokenSource.Token));
+                }
+
+                _consumer.SetChannels(channels);
             }
             catch
             {
-                if (channel != null)
-                    await channel.DisposeAsync();
+                if (channels != null)
+                {
+                    foreach (var channel in channels)
+                    {
+                        await channel.DisposeAsync();
+                    }
+                }
             }
         }
     }

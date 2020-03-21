@@ -16,6 +16,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using DotPulsar.Internal.Abstractions;
 
 namespace DotPulsar.Abstractions
 {
@@ -24,6 +25,8 @@ namespace DotPulsar.Abstractions
     /// </summary>
     public interface IConsumer : IStateChanged<ConsumerState>, IAsyncDisposable
     {
+        List<string> Topics { get; }
+        
         /// <summary>
         /// Acknowledge the consumption of a single message.
         /// </summary>
@@ -63,5 +66,7 @@ namespace DotPulsar.Abstractions
         /// Unsubscribe the consumer.
         /// </summary>
         ValueTask Unsubscribe(CancellationToken cancellationToken = default);
+        
+        void SetChannels(List<IConsumerChannel> channels);
     }
 }

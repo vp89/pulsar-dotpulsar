@@ -12,8 +12,10 @@
  * limitations under the License.
  */
 
+using DotPulsar.Abstractions;
 using DotPulsar.Internal.Abstractions;
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace DotPulsar.Internal
@@ -22,13 +24,13 @@ namespace DotPulsar.Internal
     {
         private readonly IStateManager<ProducerState> _stateManager;
         private readonly IProducerChannelFactory _factory;
-        private readonly Producer _producer;
+        private readonly IProducer _producer;
 
         public ProducerProcess(
             Guid correlationId,
             IStateManager<ProducerState> stateManager,
             IProducerChannelFactory factory,
-            Producer producer) : base(correlationId)
+            IProducer producer) : base(correlationId)
         {
             _stateManager = stateManager;
             _factory = factory;
@@ -58,7 +60,7 @@ namespace DotPulsar.Internal
                 case ChannelState.ClosedByServer:
                 case ChannelState.Disconnected:
                     _stateManager.SetState(ProducerState.Disconnected);
-                    SetupChannel();
+                    SetupChannels();
                     return;
                 case ChannelState.Connected:
                     _stateManager.SetState(ProducerState.Connected);
@@ -66,19 +68,28 @@ namespace DotPulsar.Internal
             }
         }
 
-        private async void SetupChannel()
+        private async void SetupChannels()
         {
-            IProducerChannel? channel = null;
+            var channels = new List<IProducerChannel>();
 
             try
             {
-                channel = await _factory.Create(CancellationTokenSource.Token);
-                _producer.SetChannel(channel);
+                foreach (var topic in _producer.Topics)
+                {
+                    channels.Add(await _factory.Create(topic, CancellationTokenSource.Token));
+                }
+
+                _producer.SetChannels(channels);
             }
             catch
             {
-                if (channel != null)
-                    await channel.DisposeAsync();
+                if (channels != null)
+                {
+                    foreach (var channel in channels)
+                    {
+                        await channel.DisposeAsync();
+                    }
+                }
             }
         }
     }

@@ -14,18 +14,19 @@
 
 using DotPulsar.Internal.Abstractions;
 using System;
+using DotPulsar.Abstractions;
 
 namespace DotPulsar.Internal.Events
 {
     public sealed class ProducerCreated : IEvent
     {
-        public ProducerCreated(Guid correlationId, Producer producer)
+        public ProducerCreated(Guid correlationId, IProducer producer)
         {
             CorrelationId = correlationId;
             Producer = producer;
         }
 
         public Guid CorrelationId { get; }
-        public Producer Producer { get; }
+        public IProducer Producer { get; }
     }
 }

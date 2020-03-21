@@ -198,5 +198,14 @@ namespace DotPulsar.Internal.Extensions
                 Seek = command
             };
         }
+
+        public static BaseCommand AsBaseCommand(this CommandPartitionedTopicMetadata command)
+        {
+            return new BaseCommand
+            {
+                CommandType = BaseCommand.Type.PartitionedMetadata,
+                PartitionMetadata = command
+            };
+        }
     }
 }

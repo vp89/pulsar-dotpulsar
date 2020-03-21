@@ -15,7 +15,6 @@
 using DotPulsar.Internal.Abstractions;
 using DotPulsar.Internal.Extensions;
 using DotPulsar.Internal.PulsarApi;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace DotPulsar.Internal
@@ -37,19 +36,19 @@ namespace DotPulsar.Internal
             _stream = stream;
         }
 
-        public async ValueTask<bool> HasChannels(CancellationToken cancellationToken)
+        public async ValueTask<bool> HasChannels()
         {
-            using (await _lock.Lock(cancellationToken))
+            using (await _lock.Lock())
             {
                 return _channelManager.HasChannels();
             }
         }
 
-        public async Task<ProducerResponse> Send(CommandProducer command, IChannel channel, CancellationToken cancellationToken)
+        public async Task<ProducerResponse> Send(CommandProducer command, IChannel channel)
         {
             Task<ProducerResponse>? responseTask = null;
 
-            using (await _lock.Lock(cancellationToken))
+            using (await _lock.Lock())
             {
                 var baseCommand = command.AsBaseCommand();
                 var requestResponseTask = _requestResponseHandler.Outgoing(baseCommand);
@@ -61,11 +60,27 @@ namespace DotPulsar.Internal
             return await responseTask;
         }
 
-        public async Task<SubscribeResponse> Send(CommandSubscribe command, IChannel channel, CancellationToken cancellationToken)
+        public async Task<BaseCommand> Send(CommandPartitionedTopicMetadata command)
+        {
+            Task<BaseCommand>? responseTask = null;
+
+            using (await _lock.Lock())
+            {
+                var baseCommand = command.AsBaseCommand();
+                responseTask = _requestResponseHandler.Outgoing(baseCommand);
+                _channelManager.Outgoing(command, responseTask);
+                var sequence = Serializer.Serialize(baseCommand);
+                await _stream.Send(sequence);
+            }
+
+            return await responseTask;
+        }
+
+        public async Task<SubscribeResponse> Send(CommandSubscribe command, IChannel channel)
         {
             Task<SubscribeResponse>? responseTask = null;
 
-            using (await _lock.Lock(cancellationToken))
+            using (await _lock.Lock())
             {
                 var baseCommand = command.AsBaseCommand();
                 var requestResponseTask = _requestResponseHandler.Outgoing(baseCommand);
@@ -77,23 +92,16 @@ namespace DotPulsar.Internal
             return await responseTask;
         }
 
-        public async Task Send(CommandPing command, CancellationToken cancellationToken) =>
-            await Send(command.AsBaseCommand(), cancellationToken);
+        public async Task Send(CommandPing command) => await Send(command.AsBaseCommand());
+        public async Task Send(CommandPong command) => await Send(command.AsBaseCommand());
+        public async Task Send(CommandAck command) => await Send(command.AsBaseCommand());
+        public async Task Send(CommandFlow command) => await Send(command.AsBaseCommand());
 
-        public async Task Send(CommandPong command, CancellationToken cancellationToken) =>
-            await Send(command.AsBaseCommand(), cancellationToken);
-
-        public async Task Send(CommandAck command, CancellationToken cancellationToken) =>
-            await Send(command.AsBaseCommand(), cancellationToken);
-
-        public async Task Send(CommandFlow command, CancellationToken cancellationToken) =>
-            await Send(command.AsBaseCommand(), cancellationToken);
-
-        public async Task<BaseCommand> Send(CommandUnsubscribe command, CancellationToken cancellationToken)
+        public async Task<BaseCommand> Send(CommandUnsubscribe command)
         {
             Task<BaseCommand>? responseTask = null;
 
-            using (await _lock.Lock(cancellationToken))
+            using (await _lock.Lock())
             {
                 var baseCommand = command.AsBaseCommand();
                 responseTask = _requestResponseHandler.Outgoing(baseCommand);
@@ -105,23 +113,16 @@ namespace DotPulsar.Internal
             return await responseTask;
         }
 
-        public async Task<BaseCommand> Send(CommandConnect command, CancellationToken cancellationToken) =>
-            await SendRequestResponse(command.AsBaseCommand(), cancellationToken);
+        public async Task<BaseCommand> Send(CommandConnect command) => await SendRequestResponse(command.AsBaseCommand());
+        public async Task<BaseCommand> Send(CommandLookupTopic command) => await SendRequestResponse(command.AsBaseCommand());
+        public async Task<BaseCommand> Send(CommandSeek command) => await SendRequestResponse(command.AsBaseCommand());
+        public async Task<BaseCommand> Send(CommandGetLastMessageId command) => await SendRequestResponse(command.AsBaseCommand());
 
-        public async Task<BaseCommand> Send(CommandLookupTopic command, CancellationToken cancellationToken) =>
-            await SendRequestResponse(command.AsBaseCommand(), cancellationToken);
-
-        public async Task<BaseCommand> Send(CommandSeek command, CancellationToken cancellationToken) =>
-            await SendRequestResponse(command.AsBaseCommand(), cancellationToken);
-
-        public async Task<BaseCommand> Send(CommandGetLastMessageId command, CancellationToken cancellationToken) =>
-            await SendRequestResponse(command.AsBaseCommand(), cancellationToken);
-
-        public async Task<BaseCommand> Send(CommandCloseProducer command, CancellationToken cancellationToken)
+        public async Task<BaseCommand> Send(CommandCloseProducer command)
         {
             Task<BaseCommand>? responseTask = null;
 
-            using (await _lock.Lock(cancellationToken))
+            using (await _lock.Lock())
             {
                 var baseCommand = command.AsBaseCommand();
                 responseTask = _requestResponseHandler.Outgoing(baseCommand);
@@ -133,11 +134,11 @@ namespace DotPulsar.Internal
             return await responseTask;
         }
 
-        public async Task<BaseCommand> Send(CommandCloseConsumer command, CancellationToken cancellationToken)
+        public async Task<BaseCommand> Send(CommandCloseConsumer command)
         {
             Task<BaseCommand>? responseTask = null;
 
-            using (await _lock.Lock(cancellationToken))
+            using (await _lock.Lock())
             {
                 var baseCommand = command.AsBaseCommand();
                 responseTask = _requestResponseHandler.Outgoing(baseCommand);
@@ -149,10 +150,10 @@ namespace DotPulsar.Internal
             return await responseTask;
         }
 
-        public async Task<BaseCommand> Send(SendPackage command, CancellationToken cancellationToken)
+        public async Task<BaseCommand> Send(SendPackage command)
         {
             Task<BaseCommand>? response = null;
-            using (await _lock.Lock(cancellationToken))
+            using (await _lock.Lock())
             {
                 var baseCommand = command.Command.AsBaseCommand();
                 response = _requestResponseHandler.Outgoing(baseCommand);
@@ -162,10 +163,10 @@ namespace DotPulsar.Internal
             return await response;
         }
 
-        private async Task<BaseCommand> SendRequestResponse(BaseCommand command, CancellationToken cancellationToken)
+        private async Task<BaseCommand> SendRequestResponse(BaseCommand command)
         {
             Task<BaseCommand>? response = null;
-            using (await _lock.Lock(cancellationToken))
+            using (await _lock.Lock())
             {
                 response = _requestResponseHandler.Outgoing(command);
                 var sequence = Serializer.Serialize(command);
@@ -174,16 +175,16 @@ namespace DotPulsar.Internal
             return await response;
         }
 
-        private async Task Send(BaseCommand command, CancellationToken cancellationToken)
+        private async Task Send(BaseCommand command)
         {
-            using (await _lock.Lock(cancellationToken))
+            using (await _lock.Lock())
             {
                 var sequence = Serializer.Serialize(command);
                 await _stream.Send(sequence);
             }
         }
 
-        public async Task ProcessIncommingFrames(CancellationToken cancellationToken)
+        public async Task ProcessIncommingFrames()
         {
             await Task.Yield();
 
@@ -212,7 +213,7 @@ namespace DotPulsar.Internal
                             _channelManager.Incoming(command.CloseProducer);
                             break;
                         case BaseCommand.Type.Ping:
-                            _pingPongHandler.Incoming(command.Ping, cancellationToken);
+                            _pingPongHandler.Incoming(command.Ping);
                             break;
                         default:
                             _requestResponseHandler.Incoming(command);

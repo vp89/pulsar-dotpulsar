@@ -12,7 +12,6 @@
  * limitations under the License.
  */
 
-using System.Threading;
 using DotPulsar.Internal.Abstractions;
 using DotPulsar.Internal.PulsarApi;
 
@@ -29,9 +28,9 @@ namespace DotPulsar.Internal
             _pong = new CommandPong();
         }
 
-        public void Incoming(CommandPing ping, CancellationToken cancellationToken)
+        public void Incoming(CommandPing ping)
         {
-            _ = _connection.Send(_pong, cancellationToken);
+            _ = _connection.Send(_pong);
         }
     }
 }

@@ -18,6 +18,7 @@ using DotPulsar.Internal.Extensions;
 using DotPulsar.Internal.PulsarApi;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -61,6 +62,34 @@ namespace DotPulsar.Internal
             }
         }
 
+        public async ValueTask<List<string>> GetTopics(string topic, CancellationToken cancellationToken)
+        {
+            var partitionedMetadataCommand = new CommandPartitionedTopicMetadata
+            {
+                Topic = topic
+            };
+
+            var connection = await GetConnection(_serviceUrl, _serviceUrl, cancellationToken);
+            var response = await connection.Send(partitionedMetadataCommand);
+            response.Expect(BaseCommand.Type.PartitionedMetadataResponse);
+
+            var partitionCount = response.PartitionMetadataResponse.Partitions;
+
+            if (partitionCount == 0)
+            {
+                return new List<string>() { topic };
+            }
+
+            var partitionedTopicNames = new List<string>((int)partitionCount);
+
+            for (int i = 0; i < partitionCount; i++)
+            {
+                partitionedTopicNames.Add($"{topic}-partition-{i}");
+            }
+
+            return partitionedTopicNames;
+        }
+
         public async ValueTask<IConnection> FindConnectionForTopic(string topic, CancellationToken cancellationToken)
         {
             var lookup = new CommandLookupTopic
@@ -69,12 +98,13 @@ namespace DotPulsar.Internal
                 Authoritative = false
             };
 
-            var serviceUrl = _serviceUrl;
+            var logicalUrl = _serviceUrl;
+            var physicalUrl = _serviceUrl;
 
             while (true)
             {
-                var connection = await GetConnection(serviceUrl, cancellationToken);
-                var response = await connection.Send(lookup, cancellationToken);
+                var connection = await GetConnection(logicalUrl, physicalUrl, cancellationToken);
+                var response = await connection.Send(lookup);
                 response.Expect(BaseCommand.Type.LookupResponse);
 
                 if (response.LookupTopicResponse.Response == CommandLookupTopicResponse.LookupType.Failed)
@@ -82,15 +112,12 @@ namespace DotPulsar.Internal
 
                 lookup.Authoritative = response.LookupTopicResponse.Authoritative;
 
-                serviceUrl = new Uri(GetBrokerServiceUrl(response.LookupTopicResponse));
+                logicalUrl = new Uri(GetBrokerServiceUrl(response.LookupTopicResponse));
 
                 if (response.LookupTopicResponse.Response == CommandLookupTopicResponse.LookupType.Redirect || !response.LookupTopicResponse.Authoritative)
                     continue;
 
-                if (_serviceUrl.IsLoopback) // LookupType is 'Connect', ServiceUrl is local and response is authoritative. Assume the Pulsar server is a standalone docker.
-                    return connection;
-                else
-                    return await GetConnection(serviceUrl, cancellationToken);
+                return await GetConnection(logicalUrl, physicalUrl, cancellationToken);
             }
         }
 
@@ -117,32 +144,46 @@ namespace DotPulsar.Internal
             }
         }
 
-        private async ValueTask<Connection> GetConnection(Uri serviceUrl, CancellationToken cancellationToken)
+        // The logical Url differs from the physical Url when you are
+        // connecting through a Pulsar proxy. We create 1 physical connection to
+        // the Proxy for each logical broker connection we require according to
+        // the topic lookup.
+        private async ValueTask<Connection> GetConnection(Uri logicalUrl, Uri physicalUrl, CancellationToken cancellationToken)
         {
             using (await _lock.Lock(cancellationToken))
             {
-                if (_connections.TryGetValue(serviceUrl, out Connection connection))
+                if (_connections.TryGetValue(logicalUrl, out Connection connection))
                     return connection;
 
-                return await EstablishNewConnection(serviceUrl, cancellationToken);
+                return await EstablishNewConnection(logicalUrl, physicalUrl);
             }
         }
 
-        private async Task<Connection> EstablishNewConnection(Uri serviceUrl, CancellationToken cancellationToken)
+        private async Task<Connection> EstablishNewConnection(Uri logicalUrl, Uri physicalUrl)
         {
-            var stream = await _connector.Connect(serviceUrl);
+            var stream = await _connector.Connect(physicalUrl);
             var connection = new Connection(new PulsarStream(stream));
             DotPulsarEventSource.Log.ConnectionCreated();
-            _connections[serviceUrl] = connection;
-            _ = connection.ProcessIncommingFrames(cancellationToken).ContinueWith(t => DisposeConnection(serviceUrl));
-            var response = await connection.Send(_commandConnect, cancellationToken);
+            _connections[logicalUrl] = connection;
+            _ = connection.ProcessIncommingFrames().ContinueWith(t => DisposeConnection(logicalUrl));
+
+            if (logicalUrl != physicalUrl)
+            {
+                // DirectProxyHandler expects the Url with no scheme provided
+                _commandConnect.ProxyToBrokerUrl = $"{logicalUrl.Host}:{logicalUrl.Port}";
+            }
+
+            var response = await connection.Send(_commandConnect);
             response.Expect(BaseCommand.Type.Connected);
+
+            _commandConnect.ResetProxyToBrokerUrl(); // reset so we can re-use this object
+
             return connection;
         }
 
-        private async ValueTask DisposeConnection(Uri serviceUrl)
+        private async ValueTask DisposeConnection(Uri logicalUrl)
         {
-            if (_connections.TryRemove(serviceUrl, out Connection connection))
+            if (_connections.TryRemove(logicalUrl, out var connection))
             {
                 await connection.DisposeAsync();
                 DotPulsarEventSource.Log.ConnectionDisposed();
@@ -165,7 +206,7 @@ namespace DotPulsar.Internal
                             var connection = _connections[serviceUrl];
                             if (connection is null)
                                 continue;
-                            if (!await connection.HasChannels(cancellationToken))
+                            if (!await connection.HasChannels())
                                 await DisposeConnection(serviceUrl);
                         }
                     }

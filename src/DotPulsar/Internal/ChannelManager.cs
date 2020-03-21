@@ -66,6 +66,17 @@ namespace DotPulsar.Internal
             }, TaskContinuationOptions.OnlyOnRanToCompletion);
         }
 
+        public void Outgoing(CommandPartitionedTopicMetadata command, Task<BaseCommand> response)
+        {
+            response.ContinueWith(result =>
+            {
+                if (result.Result.CommandType == BaseCommand.Type.Error)
+                {
+                    result.Result.Error.Throw();
+                }
+            }, TaskContinuationOptions.OnlyOnRanToCompletion);
+        }
+
         public void Outgoing(CommandCloseConsumer command, Task<BaseCommand> response)
         {
             var consumerId = command.ConsumerId;

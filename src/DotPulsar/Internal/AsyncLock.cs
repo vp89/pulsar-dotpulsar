@@ -36,7 +36,7 @@ namespace DotPulsar.Internal
             _isDisposed = false;
         }
 
-        public Task<IDisposable> Lock(CancellationToken cancellationToken)
+        public Task<IDisposable> Lock(CancellationToken cancellationToken = default)
         {
             LinkedListNode<CancelableCompletionSource<IDisposable>>? node = null;
 
