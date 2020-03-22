@@ -104,7 +104,8 @@ namespace DotPulsar.Internal
             while (true)
             {
                 var connection = await GetConnection(logicalUrl, physicalUrl, cancellationToken);
-                var response = await connection.Send(lookup);
+                var response = await connection.Send(lookup, cancellationToken);
+
                 response.Expect(BaseCommand.Type.LookupResponse);
 
                 if (response.LookupTopicResponse.Response == CommandLookupTopicResponse.LookupType.Failed)
@@ -155,17 +156,17 @@ namespace DotPulsar.Internal
                 if (_connections.TryGetValue(logicalUrl, out Connection connection))
                     return connection;
 
-                return await EstablishNewConnection(logicalUrl, physicalUrl);
+                return await EstablishNewConnection(logicalUrl, physicalUrl, cancellationToken);
             }
         }
 
-        private async Task<Connection> EstablishNewConnection(Uri logicalUrl, Uri physicalUrl)
+        private async Task<Connection> EstablishNewConnection(Uri logicalUrl, Uri physicalUrl, CancellationToken cancellationToken)
         {
             var stream = await _connector.Connect(physicalUrl);
             var connection = new Connection(new PulsarStream(stream));
             DotPulsarEventSource.Log.ConnectionCreated();
             _connections[logicalUrl] = connection;
-            _ = connection.ProcessIncommingFrames().ContinueWith(t => DisposeConnection(logicalUrl));
+            _ = connection.ProcessIncommingFrames(cancellationToken).ContinueWith(t => DisposeConnection(logicalUrl));
 
             if (logicalUrl != physicalUrl)
             {
@@ -173,7 +174,7 @@ namespace DotPulsar.Internal
                 _commandConnect.ProxyToBrokerUrl = $"{logicalUrl.Host}:{logicalUrl.Port}";
             }
 
-            var response = await connection.Send(_commandConnect);
+            var response = await connection.Send(_commandConnect, cancellationToken);
             response.Expect(BaseCommand.Type.Connected);
 
             _commandConnect.ResetProxyToBrokerUrl(); // reset so we can re-use this object
